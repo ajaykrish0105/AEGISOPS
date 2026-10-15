@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AegisOps - Settings</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+<style>
+.settings-card{padding:26px 28px}
+.setting-control{min-width:180px}
+.save-row{display:flex;justify-content:flex-end;margin-top:22px}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+<div class="logo">AEGIS<span>OPS</span></div>
+<div class="subtitle">Operations Console</div>
+<nav class="nav">
+<a href="/">Dashboard</a>
+<a href="/services">Services</a>
+<a href="/incidents">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/infrastructure">Infrastructure</a>
+<a href="/settings" class="active">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>AegisOps Settings</h1>
+<div class="muted">Configure monitoring, autonomous recovery and AI safety thresholds.</div>
+</div>
+</div>
+
+<div class="panel settings-card">
+<div class="setting-row">
+<div><h3>Continuous Monitoring</h3><div class="muted">Enable or pause health monitoring.</div></div>
+<div class="setting-control"><input id="monitoringEnabled" type="checkbox"></div>
+</div>
+
+<div class="setting-row">
+<div><h3>Autonomous Recovery</h3><div class="muted">Allow approved recovery actions to execute automatically.</div></div>
+<div class="setting-control"><input id="autoRecovery" type="checkbox"></div>
+</div>
+
+<div class="setting-row">
+<div><h3>Monitoring Interval</h3><div class="muted">How often AegisOps checks service health.</div></div>
+<div class="setting-control">
+<select id="monitorInterval">
+<option value="1">1 second</option>
+<option value="2">2 seconds</option>
+<option value="5">5 seconds</option>
+<option value="10">10 seconds</option>
+<option value="30">30 seconds</option>
+</select>
+</div>
+</div>
+
+<div class="setting-row">
+<div><h3>AI Confidence Threshold</h3><div class="muted">Minimum incident confidence required for local autonomous recovery.</div></div>
+<div class="setting-control">
+<select id="confidenceThreshold">
+<option value="0.50">50%</option>
+<option value="0.60">60%</option>
+<option value="0.70">70%</option>
+<option value="0.80">80%</option>
+<option value="0.90">90%</option>
+<option value="0.95">95%</option>
+</select>
+</div>
+</div>
+
+<div class="save-row"><button class="btn btn-primary" id="saveButton" onclick="saveSettings()">Save Settings</button></div>
+</div>
+
+<div class="note">
+Remote recovery also requires a configured service connector. Turning on Auto Recovery alone does not grant infrastructure access.
+</div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function toast(message,type="success"){
+    const t=document.getElementById("toast");
+    t.textContent=message;
+    t.className="toast show "+type;
+    setTimeout(()=>t.className="toast",3000);
+}
+
+async function loadSettings(){
+    const r=await fetch("/api/settings");
+    const d=await r.json();
+    document.getElementById("monitoringEnabled").checked=Boolean(d.monitoring_enabled);
+    document.getElementById("autoRecovery").checked=Boolean(d.auto_recovery);
+    document.getElementById("monitorInterval").value=String(d.monitor_interval??2);
+    document.getElementById("confidenceThreshold").value=Number(d.confidence_threshold??.70).toFixed(2);
+}
+
+async function saveSettings(){
+    const button=document.getElementById("saveButton");
+    button.disabled=true;
+    try{
+        const payload={
+            monitoring_enabled:document.getElementById("monitoringEnabled").checked,
+            auto_recovery:document.getElementById("autoRecovery").checked,
+            monitor_interval:Number(document.getElementById("monitorInterval").value),
+            confidence_threshold:Number(document.getElementById("confidenceThreshold").value)
+        };
+
+        const r=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        const d=await r.json();
+        if(!d.success)throw new Error("Save failed");
+        toast("Settings saved.");
+    }catch(error){toast(error.message,"error")}
+    finally{button.disabled=false}
+}
+
+loadSettings();
+</script>
+</body>
+</html>

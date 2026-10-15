@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AegisOps - Recovery Connectors</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+<style>
+.connector-list{display:flex;flex-direction:column;gap:16px}
+.connector-card{padding:22px;border:1px solid var(--border);border-radius:var(--radius-lg);background:linear-gradient(180deg,rgba(29,29,34,.98),rgba(24,24,28,.98))}
+.connector-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.connector-name{font-size:20px;font-weight:850;color:var(--paper)}
+.connector-meta{margin-top:5px;color:var(--text-muted);font-size:12px}
+.connector-env{margin-top:16px;padding:13px;border:1px solid rgba(160,192,201,.12);border-radius:12px;background:var(--bg-input);font-family:Consolas,monospace;color:var(--dusk);word-break:break-all}
+.connector-desc{margin-top:14px;color:var(--text-soft);line-height:1.65}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+<div class="logo">AEGIS<span>OPS</span></div>
+<div class="subtitle">Operations Console</div>
+<nav class="nav">
+<a href="/">Dashboard</a>
+<a href="/services">Services</a>
+<a href="/incidents">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/connectors" class="active">Connectors</a>
+<a href="/infrastructure">Infrastructure</a>
+<a href="/settings">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>Recovery Connectors</h1>
+<div class="muted">Secure recovery access for remote backends and hosting platforms.</div>
+</div>
+</div>
+
+<div class="summary">
+<div class="summary-card"><div class="label">Services</div><div class="big" id="total">0</div></div>
+<div class="summary-card"><div class="label">Configured</div><div class="big green" id="configured">0</div></div>
+<div class="summary-card"><div class="label">Missing</div><div class="big red" id="missing">0</div></div>
+</div>
+
+<div class="note">
+AegisOps never exposes recovery webhook secrets in the browser or services.json.
+Remote secrets are read only from environment variables on the AegisOps machine.
+</div>
+
+<div id="connectorList" class="connector-list" style="margin-top:20px">
+<div class="empty">Loading connectors...</div>
+</div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function e(value){
+    return String(value??"")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+}
+
+function toast(message,type="success"){
+    const box=document.getElementById("toast");
+    box.textContent=message;
+    box.className="toast show "+type;
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer=setTimeout(()=>box.className="toast",3500);
+}
+
+async function loadConnectors(){
+    const response=await fetch("/api/connectors");
+    const data=await response.json();
+    const items=data.connectors||[];
+
+    const configured=items.filter(item=>item.configured).length;
+
+    document.getElementById("total").textContent=items.length;
+    document.getElementById("configured").textContent=configured;
+    document.getElementById("missing").textContent=items.length-configured;
+
+    document.getElementById("connectorList").innerHTML=items.map(item=>{
+        const badge=item.configured
+            ?'<span class="badge healthy">CONFIGURED</span>'
+            :'<span class="badge down">NOT CONFIGURED</span>';
+
+        const isLocal=item.type==="LOCAL_PROCESS";
+
+        return `
+        <div class="connector-card">
+            <div class="connector-head">
+                <div>
+                    <div class="connector-name">${e(item.service_name)}</div>
+                    <div class="connector-meta">${e(item.service_id)} • ${e(item.health_url)}</div>
+                </div>
+                ${badge}
+            </div>
+
+            <div class="connector-desc">${e(item.message)}</div>
+
+            ${
+                item.env_name
+                ?`<div class="connector-env">${e(item.env_name)}</div>`
+                :'<div class="connector-env">Built-in local recovery connector</div>'
+            }
+
+            <div class="actions">
+                ${
+                    isLocal
+                    ?'<button class="btn btn-secondary" disabled>Built-in Recovery</button>'
+                    :item.configured
+                    ?`
+                        <button class="btn btn-secondary" onclick="testConnector('${e(item.service_id)}','${e(item.service_name)}')">Test Connector</button>
+                        <button class="btn btn-primary" onclick="runDrill('${e(item.service_id)}','${e(item.service_name)}')">Run Recovery Drill</button>
+                    `
+                    :'<button class="btn btn-secondary" disabled>Waiting for Secret</button>'
+                }
+            </div>
+        </div>`;
+    }).join("");
+}
+
+async function testConnector(serviceId,serviceName){
+    if(!confirm(`This will trigger the configured recovery webhook for ${serviceName}. Continue?`)){
+        return;
+    }
+
+    try{
+        const response=await fetch(`/api/connectors/${serviceId}/test`,{method:"POST"});
+        const data=await response.json();
+
+        if(!response.ok){
+            throw new Error(data.message||"Connector test failed.");
+        }
+
+        toast(data.message||"Connector accepted the request.");
+    }catch(error){
+        toast(error.message,"error");
+    }
+}
+
+
+async function runDrill(serviceId,serviceName){
+    if(!confirm(
+        `Run a safe recovery drill for ${serviceName}?\n\n`+
+        `This triggers the configured redeploy/restart connector, `+
+        `but does NOT intentionally take the production service down.`
+    )) return;
+
+    toast("Recovery drill started. Waiting for redeploy and health verification...");
+
+    try{
+        const response=await fetch(`/api/connectors/${serviceId}/drill`,{method:"POST"});
+        const data=await response.json();
+        if(!response.ok) throw new Error(data.message||"Recovery drill failed.");
+        toast(data.message||"Recovery drill completed.");
+        setTimeout(()=>window.location.href="/incidents",1500);
+    }catch(error){
+        toast(error.message,"error");
+    }
+}
+
+loadConnectors();
+setInterval(loadConnectors,5000);
+</script>
+</body>
+</html>

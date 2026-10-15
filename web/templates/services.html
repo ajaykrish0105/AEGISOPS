@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AegisOps - Services</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+</head>
+<body>
+<aside class="sidebar">
+<div class="logo">AEGIS<span>OPS</span></div>
+<div class="subtitle">Operations Console</div>
+<nav class="nav">
+<a href="/">Dashboard</a>
+<a href="/services" class="active">Services</a>
+<a href="/incidents">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/connectors">Connectors</a>
+<a href="/infrastructure">Infrastructure</a>
+<a href="/settings">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>Protected Services</h1>
+<div class="muted">Connect applications and monitor their health endpoints from AegisOps.</div>
+</div>
+<button class="btn btn-primary" onclick="openAddModal()">+ ADD SERVICE</button>
+</div>
+
+<div class="summary">
+<div class="summary-card"><div class="label">Registered</div><div class="big" id="totalServices">0</div></div>
+<div class="summary-card"><div class="label">Healthy</div><div class="big green" id="healthyServices">0</div></div>
+<div class="summary-card"><div class="label">Down / Degraded</div><div class="big red" id="downServices">0</div></div>
+</div>
+
+<div id="servicesGrid" class="grid"><div class="empty">Loading connected services...</div></div>
+
+<div class="note">
+Remote recovery requires an authorized connector. AegisOps stores the connector secret outside the UI and service registry.
+</div>
+</main>
+
+<div id="addOverlay" class="overlay">
+<div class="modal">
+<div class="modal-head">
+<h2>Add Service</h2>
+<button class="close" onclick="closeAddModal()">×</button>
+</div>
+
+<div class="field"><label>Service Name</label><input id="serviceName" placeholder="Example: Production API"></div>
+<div class="field"><label>Health URL</label><input id="healthUrl" placeholder="https://api.example.com/health"></div>
+
+<div class="field">
+<label>Service Type</label>
+<select id="serviceType">
+<option value="API">API</option>
+<option value="WEB APP">Web App</option>
+<option value="WORKER">Worker</option>
+<option value="OTHER">Other</option>
+</select>
+</div>
+
+<div class="switch-row">
+<div><strong>Enable Monitoring</strong><div class="muted">Allow AegisOps to check this service.</div></div>
+<input id="monitoringEnabled" type="checkbox" checked>
+</div>
+
+<div class="switch-row">
+<div><strong>Enable Auto Recovery</strong><div class="muted">Requires a recovery connector for remote services.</div></div>
+<input id="autoRecoveryEnabled" type="checkbox">
+</div>
+
+<div class="actions" style="justify-content:flex-end">
+<button class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+<button class="btn btn-primary" id="connectButton" onclick="connectService()">Connect Service</button>
+</div>
+</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function escapeHtml(value){
+    return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function showToast(message,type="success"){
+    const toast=document.getElementById("toast");
+    toast.textContent=message;
+    toast.className="toast show "+type;
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer=setTimeout(()=>toast.className="toast",3500);
+}
+function openAddModal(){document.getElementById("addOverlay").classList.add("show")}
+function closeAddModal(){document.getElementById("addOverlay").classList.remove("show")}
+document.getElementById("addOverlay").addEventListener("click",e=>{if(e.target.id==="addOverlay")closeAddModal()});
+
+async function loadServices(){
+    try{
+        const response=await fetch("/api/services");
+        const data=await response.json();
+        renderServices(data.services||[]);
+    }catch(error){
+        document.getElementById("servicesGrid").innerHTML='<div class="empty">Unable to load services.</div>';
+    }
+}
+
+function renderServices(services){
+    const grid=document.getElementById("servicesGrid");
+    const healthy=services.filter(s=>s.status==="HEALTHY").length;
+    const unstable=services.length-healthy;
+    document.getElementById("totalServices").textContent=services.length;
+    document.getElementById("healthyServices").textContent=healthy;
+    document.getElementById("downServices").textContent=unstable;
+
+    grid.innerHTML=services.map(service=>{
+        const badgeClass=service.status==="HEALTHY"?"healthy":service.status==="DEGRADED"?"checking":"down";
+        const protectedDemo=String(service.name).toLowerCase()==="payment-api";
+
+        return `
+        <div class="service-card">
+            <div class="service-head">
+                <div>
+                    <div class="service-name">${escapeHtml(service.name)}</div>
+                    <div class="service-id">${escapeHtml(service.id)} • ${escapeHtml(service.service_type)}</div>
+                </div>
+                <div class="badge ${badgeClass}">${escapeHtml(service.status||"CHECKING")}</div>
+            </div>
+
+            <div class="url">${escapeHtml(service.health_url)}</div>
+
+            <div class="meta">
+                <div class="meta-box"><span>HTTP STATUS</span><strong>${service.http_status??"--"}</strong></div>
+                <div class="meta-box"><span>LAST CHECK</span><strong>${escapeHtml(service.checked_at||"--")}</strong></div>
+                <div class="meta-box"><span>MONITORING</span><strong>${service.monitoring_enabled?"ON":"OFF"}</strong></div>
+                <div class="meta-box"><span>AUTO RECOVERY</span><strong>${service.auto_recovery?"ON":"OFF"}</strong></div>
+                <div class="meta-box"><span>CONNECTOR</span><strong>${service.connector?.configured?"READY":"MISSING"}</strong></div>
+            </div>
+
+            ${service.error?`<div class="url" style="color:#FFB8A8">${escapeHtml(service.error)}</div>`:""}
+
+            <div class="actions">
+                <a class="btn btn-secondary" href="/connectors">Connector</a>
+                <button class="btn btn-secondary" onclick="checkHealth('${escapeHtml(service.id)}')">Check Health</button>
+                <button class="btn btn-secondary" onclick="patchService('${escapeHtml(service.id)}',{monitoring_enabled:${!service.monitoring_enabled}})">
+                    Monitoring ${service.monitoring_enabled?"OFF":"ON"}
+                </button>
+                <button class="btn btn-secondary" onclick="patchService('${escapeHtml(service.id)}',{auto_recovery:${!service.auto_recovery}})">
+                    Auto Recovery ${service.auto_recovery?"OFF":"ON"}
+                </button>
+                ${protectedDemo?'<button class="btn btn-danger" disabled>Protected Demo</button>':`<button class="btn btn-danger" onclick="removeService('${escapeHtml(service.id)}','${escapeHtml(service.name)}')">Remove</button>`}
+            </div>
+        </div>`;
+    }).join("");
+}
+
+async function connectService(){
+    const button=document.getElementById("connectButton");
+    const payload={
+        name:document.getElementById("serviceName").value.trim(),
+        health_url:document.getElementById("healthUrl").value.trim(),
+        service_type:document.getElementById("serviceType").value,
+        monitoring_enabled:document.getElementById("monitoringEnabled").checked,
+        auto_recovery:document.getElementById("autoRecoveryEnabled").checked
+    };
+
+    if(!payload.name||!payload.health_url){showToast("Enter service name and health URL.","error");return;}
+
+    button.disabled=true;
+    try{
+        const response=await fetch("/api/services",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.message||"Unable to connect service.");
+        closeAddModal();
+        showToast(data.message||"Service connected.");
+        await loadServices();
+    }catch(error){showToast(error.message,"error")}
+    finally{button.disabled=false}
+}
+
+async function checkHealth(id){
+    const response=await fetch(`/api/services/${id}/check`,{method:"POST"});
+    const data=await response.json();
+    showToast(`${data.service?.name||id}: ${data.service?.status||"checked"}`);
+    await loadServices();
+}
+
+async function patchService(id,payload){
+    const response=await fetch(`/api/services/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const data=await response.json();
+    if(!response.ok){showToast(data.message||"Update failed","error");return;}
+    showToast("Service updated.");
+    await loadServices();
+}
+
+async function removeService(id,name){
+    if(!confirm(`Remove ${name} from AegisOps?`))return;
+    const response=await fetch(`/api/services/${id}`,{method:"DELETE"});
+    const data=await response.json();
+    if(!response.ok){showToast(data.message||"Remove failed","error");return;}
+    showToast(data.message||"Service removed.");
+    await loadServices();
+}
+
+loadServices();
+setInterval(loadServices,5000);
+</script>
+</body>
+</html>

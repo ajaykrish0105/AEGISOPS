@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AegisOps Infrastructure</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+<style>
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:22px}
+.agent-card{background:#1d1e22;border:1px solid #34363d;border-radius:28px;padding:26px}
+.row{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}
+.badge{padding:8px 14px;border-radius:999px;font-weight:800;font-size:12px}
+.online{background:#183a31;color:#77e0b8}.offline{background:#40231f;color:#ff9b87}
+.mini{background:#121316;border:1px solid #2c2e34;border-radius:18px;padding:16px;margin-top:14px}
+.code{font-family:monospace;color:#a0c0c9;word-break:break-all}
+.form-grid{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:12px;margin-top:20px}
+input,select{width:100%;box-sizing:border-box;background:#111216;color:#fff;border:1px solid #34363d;border-radius:14px;padding:14px}
+.bind{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:14px}
+@media(max-width:900px){.form-grid,.bind{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+<div class="brand"><div class="brand-mark">A</div><div><div class="brand-name">AegisOps</div><div class="brand-sub">AUTONOMOUS OPERATIONS</div></div></div>
+<nav class="nav">
+<a href="/">Dashboard</a>
+<a href="/services">Services</a>
+<a href="/incidents">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/connectors">Connectors</a>
+<a href="/infrastructure" class="active">Infrastructure</a>
+<a href="/settings">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>Infrastructure Agents</h1>
+<div class="muted">Authorized AegisOps Agents provide evidence and execute only pre-approved recovery runbooks.</div>
+</div>
+</div>
+
+<div class="panel">
+<h3>Register Agent</h3>
+<div class="form-grid">
+<input id="agentId" placeholder="AGENT-001">
+<input id="agentName" placeholder="Production Server">
+<input id="agentUrl" placeholder="http://10.0.0.10:9100">
+<button class="btn btn-primary" onclick="addAgent()">Register</button>
+</div>
+<div class="muted" style="margin-top:12px">Secrets are never stored here. After registration, AegisOps shows the environment variable name for the token.</div>
+</div>
+
+<div style="height:24px"></div>
+<div id="agents" class="grid"><div class="empty">Loading infrastructure...</div></div>
+</main>
+</div>
+
+<script>
+function e(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
+async function loadAgents(){
+  const r=await fetch("/api/infrastructure");
+  const d=await r.json();
+  const root=document.getElementById("agents");
+  if(!d.agents?.length){root.innerHTML='<div class="empty">No infrastructure agents registered yet.</div>';return;}
+  root.innerHTML=d.agents.map(a=>{
+    const s=a.snapshot||{};
+    const services=s.services||[];
+    const serviceOptions=services.map(x=>`<option value="${e(x.name)}">${e(x.name)}</option>`).join("");
+    return `<div class="agent-card">
+      <div class="row">
+        <div><h2>${e(a.name)}</h2><div class="muted">${e(a.id)} • ${e(a.base_url)}</div></div>
+        <span class="badge ${s.online?'online':'offline'}">${s.online?'ONLINE':'OFFLINE'}</span>
+      </div>
+      <div class="mini"><div class="label">TOKEN ENVIRONMENT VARIABLE</div><div class="code">${e(s.token_env||"")}</div></div>
+      <div class="mini"><div class="label">DISCOVERED SERVICES</div><div style="margin-top:8px">${services.length?services.map(x=>`<div>${e(x.name)}</div>`).join(""):"No services discovered."}</div></div>
+      ${s.error?`<div class="mini"><div class="label">CONNECTION</div><div class="muted">${e(s.error)}</div></div>`:""}
+      <div class="bind">
+        <input id="svc-${e(a.id)}" placeholder="AegisOps service ID e.g. SVC-004">
+        <select id="agent-svc-${e(a.id)}"><option value="">Choose agent service</option>${serviceOptions}</select>
+        <button class="btn btn-secondary" onclick="bindService('${e(a.id)}')">Bind</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-secondary" onclick="checkAgent('${e(a.id)}')">Check Agent</button>
+        <button class="btn btn-danger" onclick="removeAgent('${e(a.id)}')">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+async function addAgent(){
+  const payload={id:agentId.value.trim(),name:agentName.value.trim(),base_url:agentUrl.value.trim()};
+  const r=await fetch("/api/infrastructure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const d=await r.json();
+  alert(d.message+(d.token_env?`\n\nSet on AegisOps machine:\n${d.token_env}`:""));
+  if(r.ok) loadAgents();
+}
+async function checkAgent(id){
+  const r=await fetch(`/api/infrastructure/${id}/check`,{method:"POST"});
+  const d=await r.json();
+  alert(d.online?"Agent online.":(d.error||d.message||"Agent offline."));
+  loadAgents();
+}
+async function bindService(id){
+  const service_id=document.getElementById(`svc-${id}`).value.trim();
+  const agent_service=document.getElementById(`agent-svc-${id}`).value;
+  const r=await fetch(`/api/infrastructure/${id}/bind`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service_id,agent_service})});
+  const d=await r.json(); alert(d.message); if(r.ok)loadAgents();
+}
+async function removeAgent(id){
+  if(!confirm("Remove this agent registration?"))return;
+  const r=await fetch(`/api/infrastructure/${id}`,{method:"DELETE"});
+  const d=await r.json(); alert(d.message); loadAgents();
+}
+loadAgents();
+setInterval(loadAgents,10000);
+</script>
+</body>
+</html>

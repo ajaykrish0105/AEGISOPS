@@ -1,0 +1,27 @@
+﻿.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+node_modules/
+*.log
+*.sqlite3
+*.db
+backend_lab/runtime/
+data/*.json
+data/*.csv
+
+/AEGISOPS/
+
+# AegisOps local files
+/AEGISOPS/
+agent/agent_audit.jsonl
+agent/policy.json
+agent/*.backup-*
+core/*.backup-*
+data/*.backup-*
+data/*.bak
+*.joblib
+*.jsonl

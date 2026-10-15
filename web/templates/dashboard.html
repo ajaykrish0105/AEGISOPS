@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AegisOps - Dashboard</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+<style>
+.top-actions{display:flex;gap:10px;align-items:center}
+.notify-btn{position:relative}
+.notify-count{position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;border-radius:999px;background:var(--poppy);color:var(--paper);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:800;padding:0 5px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+<div class="logo">AEGIS<span>OPS</span></div>
+<div class="subtitle">Operations Console</div>
+<nav class="nav">
+<a href="/" class="active">Dashboard</a>
+<a href="/services">Services</a>
+<a href="/incidents">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/connectors">Connectors</a>
+<a href="/infrastructure">Infrastructure</a>
+<a href="/settings">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>System Overview</h1>
+<div class="muted">Autonomous cloud incident monitoring, diagnosis and recovery.</div>
+</div>
+<div class="top-actions">
+<a class="btn btn-secondary notify-btn" href="/notifications">
+Notifications
+<span class="notify-count" id="notifyCount">0</span>
+</a>
+<div class="pill">SYSTEM OPERATIONAL</div>
+</div>
+</div>
+
+<div class="cards">
+<div class="card">
+<div class="label">Primary Service</div>
+<div id="serviceStatus" class="value">CHECKING</div>
+<div class="muted" id="serviceName" style="margin-top:10px">payment-api</div>
+</div>
+
+<div class="card">
+<div class="label">CPU Usage</div>
+<div id="cpu" class="value">--</div>
+<div class="muted" style="margin-top:10px">Host resource usage</div>
+</div>
+
+<div class="card">
+<div class="label">Memory Usage</div>
+<div id="memory" class="value">--</div>
+<div class="muted" style="margin-top:10px">Current system memory</div>
+</div>
+
+<div class="card">
+<div class="label">Registered Services</div>
+<div id="serviceCount" class="value blue">0</div>
+<div class="muted" id="serviceSummary" style="margin-top:10px">0 healthy • 0 down</div>
+</div>
+</div>
+
+<div class="panel">
+<div class="label">AegisOps Runtime</div>
+<div id="pipelineStage" style="font-size:24px;font-weight:850">MONITORING</div>
+<div class="muted" id="runtimeText" style="margin-top:10px">Continuous monitoring engine is active.</div>
+</div>
+
+<div class="panel">
+<div class="label">Latest Incident</div>
+<div class="latest">
+<div class="info">Incident<strong id="latestId">NO INCIDENT</strong></div>
+<div class="info">AI Diagnosis<strong id="diagnosis">--</strong></div>
+<div class="info">Confidence<strong id="confidence">--</strong></div>
+<div class="info">Verification<strong id="verification">--</strong></div>
+</div>
+</div>
+
+<div class="panel">
+<div class="label">Autonomous Recovery Pipeline</div>
+<div class="pipeline">
+<div class="stage">MONITOR</div><div>→</div>
+<div class="stage">EVIDENCE</div><div>→</div>
+<div class="stage">AI ANALYSIS</div><div>→</div>
+<div class="stage">SAFETY</div><div>→</div>
+<div class="stage">RECOVERY</div><div>→</div>
+<div class="stage">VERIFY</div><div>→</div>
+<div class="stage">NOTIFY</div>
+</div>
+</div>
+
+<div id="updated" class="muted">Connecting to AegisOps...</div>
+</main>
+
+<script>
+async function refreshDashboard(){
+    try{
+        const response=await fetch("/api/dashboard");
+        const data=await response.json();
+        const service=data.service||{};
+        const system=data.system||{};
+        const status=document.getElementById("serviceStatus");
+
+        document.getElementById("serviceName").textContent=service.name||"payment-api";
+
+        if(service.status==="HEALTHY"){
+            status.textContent="HEALTHY";
+            status.className="value green";
+        }else if(service.status==="DEGRADED"){
+            status.textContent="DEGRADED";
+            status.className="value blue";
+        }else{
+            status.textContent="DOWN";
+            status.className="value red";
+        }
+
+        document.getElementById("cpu").textContent=(system.cpu??0)+"%";
+        document.getElementById("memory").textContent=(system.memory??0)+"%";
+        document.getElementById("serviceCount").textContent=data.service_count??0;
+        document.getElementById("serviceSummary").textContent=
+            `${data.healthy_service_count??0} healthy • ${data.degraded_service_count??0} degraded • ${data.down_service_count??0} down`;
+        document.getElementById("notifyCount").textContent=data.unread_notifications??0;
+
+        const stage=data.aegisops?.pipeline_stage||"MONITORING";
+        document.getElementById("pipelineStage").textContent=stage;
+        document.getElementById("runtimeText").textContent=
+            stage==="MONITORING"
+                ?"Continuous monitoring engine is active."
+                :`Current pipeline state: ${stage}`;
+
+        const latest=data.latest_incident;
+        if(latest){
+            document.getElementById("latestId").textContent=latest.id||"--";
+            document.getElementById("diagnosis").textContent=latest.analysis?.incident||"--";
+            const confidence=Number(latest.analysis?.confidence||0)*100;
+            document.getElementById("confidence").textContent=confidence.toFixed(1)+"%";
+            document.getElementById("verification").textContent=
+                latest.recovery?.verified
+                    ?"VERIFIED"
+                    :latest.recovery?.connector_required
+                    ?"CONNECTOR REQUIRED"
+                    :"FAILED";
+        }
+
+        document.getElementById("updated").textContent=
+            "Live update • "+new Date().toLocaleTimeString();
+
+    }catch(error){
+        document.getElementById("updated").textContent=
+            "Unable to communicate with AegisOps backend.";
+    }
+}
+
+refreshDashboard();
+setInterval(refreshDashboard,2000);
+</script>
+</body>
+</html>

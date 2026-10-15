@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AegisOps - Incident History</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+
+<style>
+/* AegisOps scroll behavior: LEFT sidebar scrolls independently.
+   RIGHT/main content uses the browser's normal page scroll. */
+html{
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    scrollbar-width:auto !important;
+    scrollbar-color:auto !important;
+}
+body{
+    min-height:100vh !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+}
+.main{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+}
+
+/* Only the left menu gets its own scroll area */
+.sidebar{
+    height:100vh !important;
+    max-height:100vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5f6870 transparent;
+}
+.sidebar::-webkit-scrollbar{
+    width:7px;
+}
+.sidebar::-webkit-scrollbar-track{
+    background:transparent;
+}
+.sidebar::-webkit-scrollbar-thumb{
+    background:#5f6870;
+    border-radius:999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover{
+    background:#8aa6af;
+}
+
+/* Do not apply any custom scrollbar styling to the right/main page */
+body::-webkit-scrollbar,
+html::-webkit-scrollbar{
+    width:auto;
+}
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track{
+    background:initial;
+}
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb{
+    background:initial;
+    border-radius:initial;
+}
+
+.sidebar .nav{
+    padding-bottom:28px !important;
+}
+.sidebar .protection{
+    flex-shrink:0;
+    margin-bottom:18px;
+}
+
+@media (max-width:900px){
+    .sidebar{
+        position:relative !important;
+        height:auto !important;
+        max-height:none !important;
+        overflow:visible !important;
+    }
+}
+</style>
+
+
+
+
+</head>
+<body>
+<aside class="sidebar">
+<div class="logo">AEGIS<span>OPS</span></div>
+<div class="subtitle">Operations Console</div>
+<nav class="nav">
+<a href="/">Dashboard</a>
+<a href="/services">Services</a>
+<a href="/incidents" class="active">Incidents</a>
+<a href="/assistant">Aegis AI</a>
+<a href="/notifications">Notifications</a>
+<a href="/connectors">Connectors</a>
+<a href="/infrastructure">Infrastructure</a>
+<a href="/settings">Settings</a>
+</nav>
+
+</aside>
+
+<main class="main">
+<div class="top">
+<div>
+<h1>Incident History</h1>
+<div class="muted">Evidence, AI diagnosis, safety decisions, recovery actions and verification results.</div>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="label">Total Incidents</div><div class="value blue" id="total">0</div></div>
+<div class="stat"><div class="label">Resolved</div><div class="value green" id="resolved">0</div></div>
+<div class="stat"><div class="label">Needs Attention</div><div class="value red" id="attention">0</div></div>
+</div>
+
+<div id="incidents"><div class="empty">Loading incident history...</div></div>
+</main>
+
+<script>
+function e(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+function sc(s){return s==="RESOLVED"?"resolved":s==="CONNECTOR_REQUIRED"?"connector":"attention"}
+
+async function loadIncidents(){
+    const response=await fetch("/api/incidents");
+    const data=await response.json();
+    const list=data.incidents||[];
+
+    document.getElementById("total").textContent=data.count??0;
+    document.getElementById("resolved").textContent=data.resolved??0;
+    document.getElementById("attention").textContent=data.needs_attention??0;
+
+    if(!list.length){
+        document.getElementById("incidents").innerHTML='<div class="empty">No incidents recorded yet.</div>';
+        return;
+    }
+
+    document.getElementById("incidents").innerHTML=list.map(i=>{
+        const a=i.analysis||{},s=i.safety||{},r=i.recovery||{},ev=i.evidence||{};
+        const conf=Number(a.confidence||0)*100;
+        const action=a.policy_action||a.action||"--";
+        const verify=r.verified?"VERIFIED":r.connector_required?"CONNECTOR REQUIRED":"FAILED";
+
+        return `
+        <div class="incident">
+            <div class="incident-head">
+                <div>
+                    <div class="incident-id">${e(i.id||"UNKNOWN")}</div>
+                    <div class="incident-sub">${e(i.service_name||ev.service_name||"--")} • ${e(i.detected_at||"--")}</div>
+                </div>
+                <div class="badge ${sc(i.status)}">${e(i.status||"UNKNOWN")}</div>
+            </div>
+
+            <div class="details">
+                <div class="box"><div class="k">AI DIAGNOSIS</div><div class="v">${e(a.incident||"--")}</div></div>
+                <div class="box"><div class="k">CONFIDENCE</div><div class="v blue">${conf.toFixed(1)}%</div></div>
+                <div class="box"><div class="k">RECOVERY ACTION</div><div class="v">${e(action)}</div></div>
+                <div class="box"><div class="k">SAFETY</div><div class="v ${s.approved?"good":"bad"}">${s.approved?"APPROVED":"BLOCKED"}</div></div>
+                <div class="box"><div class="k">FAILURE TYPE</div><div class="v">${e(ev.failure_type||"--")}</div></div>
+                <div class="box"><div class="k">HTTP STATUS</div><div class="v">${e(ev.http_status??"--")}</div></div>
+                <div class="box"><div class="k">RECOVERY</div><div class="v ${r.success?"good":"bad"}">${r.success?"SUCCESS":r.connector_required?"CONNECTOR REQUIRED":"NOT SUCCESSFUL"}</div></div>
+                <div class="box"><div class="k">VERIFICATION</div><div class="v ${r.verified?"good":"blue"}">${e(verify)}</div></div>
+            </div>
+        </div>`;
+    }).join("");
+}
+
+loadIncidents();
+setInterval(loadIncidents,3000);
+</script>
+</body>
+</html>
