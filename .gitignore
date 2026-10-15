@@ -25,3 +25,12 @@ data/*.backup-*
 data/*.bak
 *.joblib
 *.jsonl
+
+# Accidental files
+/Ops
+/et
+/onl
+
+/Ops
+/et
+/onl
