@@ -36,13 +36,19 @@ def main():
     services = load(SERVICES, list)
     agents = load(AGENTS, list)
     policy = load(POLICY, dict)
-    ids = {str(s.get('id')) for s in services}
-    if 'SVC-004' not in ids:
-        services.append({'id': 'SVC-004', 'name': 'AegisOps Demo Backend', 'health_url': 'http://127.0.0.1:8200/health', 'service_type': 'API', 'monitoring_enabled': True, 'auto_recovery': False, 'created_at': datetime.now().isoformat(timespec='seconds')})
+    service = next((s for s in services if str(s.get('id')) == 'SVC-004'), None)
+    if service is None:
+        service = {'id': 'SVC-004', 'name': 'AegisOps Demo Backend', 'health_url': 'http://127.0.0.1:8200/health', 'service_type': 'API', 'monitoring_enabled': True, 'auto_recovery': False, 'created_at': datetime.now().isoformat(timespec='seconds')}
+        services.append(service)
         save(SERVICES, services)
         print('[OK] SVC-004 registered (automatic recovery intentionally OFF until monitor integration verified)')
+    elif service.get('auto_recovery') is not False:
+        # Preserve the existing service definition except for this safety-critical flag.
+        service['auto_recovery'] = False
+        save(SERVICES, services)
+        print('[SAFE] SVC-004 automatic recovery forced OFF pending prerequisite verification')
     else:
-        print('[SKIP] SVC-004 already exists; preserved')
+        print('[SKIP] SVC-004 exists and automatic recovery is already OFF; preserved')
     configured = policy.setdefault('services', {})
     if 'aegisops-demo-backend' not in configured:
         configured['aegisops-demo-backend'] = {'health_url': 'http://127.0.0.1:8200/health', 'log_file': '', 'metadata': {'environment': 'local-lab', 'owner': 'Team Kairo'}, 'actions': {'RESTART_SERVICE': [sys.executable, str(BACKEND)]}}
