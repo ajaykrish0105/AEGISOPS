@@ -919,18 +919,27 @@ def handle_agent_backend_failure(service, health, settings):
                 recovery["automatic"] = True
                 # Never claim success merely because the agent accepted the command.
                 update_runtime_status(pipeline_stage="VERIFY", active_service=service.get("name"))
-                for _ in range(12):
+                consecutive_successes = 0
+                for check_number in range(12):
                     verification = check_health(service)
                     if verification.get("healthy"):
-                        recovery["verified"] = True
-                        recovery["success"] = True
-                        status = "RESOLVED"
-                        FAILURE_COUNTS[service_key] = 0
-                        break
-                    time.sleep(2)
+                        consecutive_successes += 1
+                        if consecutive_successes >= 3:
+                            recovery["verified"] = True
+                            recovery["success"] = True
+                            recovery["verification_checks"] = check_number + 1
+                            recovery["consecutive_successful_checks"] = consecutive_successes
+                            status = "RESOLVED"
+                            FAILURE_COUNTS[service_key] = 0
+                            break
+                    else:
+                        consecutive_successes = 0
+                    if check_number < 11:
+                        time.sleep(2)
                 if status != "RESOLVED":
                     recovery["verified"] = False
                     recovery["success"] = False
+                    recovery["consecutive_successful_checks"] = consecutive_successes
                     status = "RECOVERY_FAILED"
     except Exception as error:
         safety["reason"] = "Agent communication or execution error: " + str(error)
