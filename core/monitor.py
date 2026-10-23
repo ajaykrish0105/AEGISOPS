@@ -869,6 +869,32 @@ def handle_remote_failure(service, health, settings):
 
 
 
+def verify_agent_recovery(service, required_successes=3, max_checks=12, interval_seconds=2):
+    """Verify recovery only after consecutive successful service health checks."""
+    consecutive_successes = 0
+    for check_number in range(max_checks):
+        verification = check_health(service)
+        if verification.get("healthy"):
+            consecutive_successes += 1
+            if consecutive_successes >= required_successes:
+                return {
+                    "verified": True,
+                    "success": True,
+                    "verification_checks": check_number + 1,
+                    "consecutive_successful_checks": consecutive_successes,
+                }
+        else:
+            consecutive_successes = 0
+        if check_number < max_checks - 1:
+            time.sleep(interval_seconds)
+    return {
+        "verified": False,
+        "success": False,
+        "verification_checks": max_checks,
+        "consecutive_successful_checks": consecutive_successes,
+    }
+
+
 # AEGISOPS SVC-004 AGENT INTEGRATION V1
 def handle_agent_backend_failure(service, health, settings):
     """Agent-only recovery for the explicitly allowlisted local demo backend."""
@@ -919,27 +945,12 @@ def handle_agent_backend_failure(service, health, settings):
                 recovery["automatic"] = True
                 # Never claim success merely because the agent accepted the command.
                 update_runtime_status(pipeline_stage="VERIFY", active_service=service.get("name"))
-                consecutive_successes = 0
-                for check_number in range(12):
-                    verification = check_health(service)
-                    if verification.get("healthy"):
-                        consecutive_successes += 1
-                        if consecutive_successes >= 3:
-                            recovery["verified"] = True
-                            recovery["success"] = True
-                            recovery["verification_checks"] = check_number + 1
-                            recovery["consecutive_successful_checks"] = consecutive_successes
-                            status = "RESOLVED"
-                            FAILURE_COUNTS[service_key] = 0
-                            break
-                    else:
-                        consecutive_successes = 0
-                    if check_number < 11:
-                        time.sleep(2)
-                if status != "RESOLVED":
-                    recovery["verified"] = False
-                    recovery["success"] = False
-                    recovery["consecutive_successful_checks"] = consecutive_successes
+                verification_result = verify_agent_recovery(service)
+                recovery.update(verification_result)
+                if verification_result["verified"]:
+                    status = "RESOLVED"
+                    FAILURE_COUNTS[service_key] = 0
+                else:
                     status = "RECOVERY_FAILED"
     except Exception as error:
         safety["reason"] = "Agent communication or execution error: " + str(error)
