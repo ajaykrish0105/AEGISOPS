@@ -943,15 +943,24 @@ def handle_agent_backend_failure(service, health, settings):
                 recovery = dict(result) if isinstance(result, dict) else {"result": str(result)}
                 recovery["attempted"] = True
                 recovery["automatic"] = True
-                # Never claim success merely because the agent accepted the command.
-                update_runtime_status(pipeline_stage="VERIFY", active_service=service.get("name"))
-                verification_result = verify_agent_recovery(service)
-                recovery.update(verification_result)
-                if verification_result["verified"]:
-                    status = "RESOLVED"
-                    FAILURE_COUNTS[service_key] = 0
-                else:
+                action_succeeded = bool(recovery.get("success"))
+                recovery["action_succeeded"] = action_succeeded
+                # A healthy service alone cannot turn a failed action into a successful recovery.
+                if not action_succeeded:
+                    recovery["verified"] = False
+                    recovery["success"] = False
+                    recovery["verification_skipped_reason"] = "Agent action did not report success."
                     status = "RECOVERY_FAILED"
+                else:
+                    update_runtime_status(pipeline_stage="VERIFY", active_service=service.get("name"))
+                    verification_result = verify_agent_recovery(service)
+                    recovery.update(verification_result)
+                    recovery["action_succeeded"] = True
+                    if verification_result["verified"]:
+                        status = "RESOLVED"
+                        FAILURE_COUNTS[service_key] = 0
+                    else:
+                        status = "RECOVERY_FAILED"
     except Exception as error:
         safety["reason"] = "Agent communication or execution error: " + str(error)
         status = "RECOVERY_FAILED" if recovery.get("attempted") else "HUMAN_REVIEW_REQUIRED"
