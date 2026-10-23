@@ -32,3 +32,4 @@ jobs:
           integrate_svc004_agent.py
           tests/test_agent_auth.py
           tests/test_agent_recovery_verification.py
+          tests/test_register_backend_lab.py
